@@ -18,11 +18,11 @@ import matplotlib.pyplot as plt
 # ==========================================
 
 st.set_page_config(
-    page_title="Análisis Polinomial Yahoo Finance",
+    page_title="Análisis Polinomial",
     layout="wide"
 )
 
-st.title("📈 Análisis de Soporte, Ruptura y Derivadas Polinomiales")
+st.title("Análisis Polinomial | Antes de invertir")
 
 # ==========================================
 # ENTRADAS
@@ -53,32 +53,44 @@ grado_polinomio = st.slider(
 )
 
 # ==========================================
-# DESCARGA DE DATOS
+# BOTÓN
 # ==========================================
 
 if st.button("Analizar"):
 
     try:
 
+        # ======================================
+        # DESCARGA DE DATOS
+        # ======================================
+
         datos = yf.download(
             ticker,
             period=periodo,
             interval=intervalo,
-            auto_adjust=True
+            auto_adjust=True,
+            progress=False
         )
 
-        if len(datos) < 10:
-            st.error("No hay suficientes datos.")
+        if datos.empty:
+            st.error("No se encontraron datos.")
             st.stop()
 
         # ======================================
-        # PREPARACIÓN
+        # CORRECCIÓN MULTIINDEX
         # ======================================
 
-        S = datos["Close"]
+        if isinstance(datos.columns, pd.MultiIndex):
+            datos.columns = datos.columns.get_level_values(0)
+
+        # ======================================
+        # CIERRES
+        # ======================================
+
+        close_prices = datos["Close"].to_numpy().flatten()
 
         Pf2 = pd.DataFrame({
-            "Close": S.values
+            "Close": close_prices
         })
 
         Pf2["Date"] = np.arange(
@@ -100,6 +112,10 @@ if st.button("Analizar"):
             coeficientes
         )
 
+        # ======================================
+        # DERIVADA
+        # ======================================
+
         derivada = np.polyder(
             polinomio
         )
@@ -118,7 +134,7 @@ if st.button("Analizar"):
         )
 
         # ======================================
-        # ÚLTIMAS PENDIENTES
+        # ÚLTIMOS 10 REGISTROS
         # ======================================
 
         n = min(10, len(pendiente))
@@ -129,36 +145,38 @@ if st.button("Analizar"):
         })
 
         # ======================================
-        # SEÑAL
-        # ======================================
-
-        ultima_pendiente = pendiente[-1]
-
-        if ultima_pendiente > 0:
-            señal = "🟢 Tendencia Alcista"
-        elif ultima_pendiente < 0:
-            señal = "🔴 Tendencia Bajista"
-        else:
-            señal = "🟡 Sin Cambio"
-
-        # ======================================
         # MÉTRICAS
         # ======================================
 
-        c1, c2, c3 = st.columns(3)
+        ultimo_precio = float(
+            Pf2["Close"].iloc[-1]
+        )
 
-        c1.metric(
+        ultima_pendiente = float(
+            pendiente[-1]
+        )
+
+        if ultima_pendiente > 0:
+            señal = "🟢 Alcista"
+        elif ultima_pendiente < 0:
+            señal = "🔴 Bajista"
+        else:
+            señal = "🟡 Neutral"
+
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric(
             "Último Precio",
-            round(float(Pf2["Close"].iloc[-1]), 2)
+            f"{ultimo_precio:,.2f}"
         )
 
-        c2.metric(
+        col2.metric(
             "Última Pendiente",
-            round(float(ultima_pendiente), 4)
+            f"{ultima_pendiente:.4f}"
         )
 
-        c3.metric(
-            "Señal",
+        col3.metric(
+            "Tendencia",
             señal
         )
 
@@ -184,15 +202,15 @@ if st.button("Analizar"):
         ax1.scatter(
             Pf2["Date"],
             Pf2["Close"],
-            s=10,
-            label="Precio"
+            s=15,
+            label="Precio Real"
         )
 
         ax1.scatter(
             Pf2["Date"].iloc[-1],
             Pf2["Close"].iloc[-1],
             s=120,
-            label="Último Dato"
+            label="Último Precio"
         )
 
         ax1.plot(
@@ -228,21 +246,41 @@ if st.button("Analizar"):
         )
 
         ax2.axhline(
-            0,
+            y=0,
             linestyle="--"
         )
 
         ax2.set_title(
-            "Derivada del Polinomio"
+            f"{ticker} - Derivada del Ajuste Polinomial"
         )
 
-        ax2.set_ylabel(
-            "Pendiente"
-        )
+        ax2.set_xlabel("Fecha")
+        ax2.set_ylabel("Pendiente")
 
         ax2.grid(True)
 
         st.pyplot(fig2)
+
+        # ======================================
+        # INTERPRETACIÓN
+        # ======================================
+
+        st.subheader("Interpretación")
+
+        if ultima_pendiente > 0:
+            st.success(
+                "La derivada es positiva. El ajuste polinomial muestra una tendencia alcista."
+            )
+
+        elif ultima_pendiente < 0:
+            st.error(
+                "La derivada es negativa. El ajuste polinomial muestra una tendencia bajista."
+            )
+
+        else:
+            st.warning(
+                "La derivada es cercana a cero. No existe una tendencia clara."
+            )
 
     except Exception as e:
         st.error(f"Error: {e}")
